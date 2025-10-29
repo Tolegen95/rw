@@ -3,7 +3,9 @@ services:
     name: flask-app
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --config gunicorn.conf.py
+    startCommand: gunicorn -w 1 -t 120 -b 0.0.0.0:$PORT app:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0
+      - key: WEB_CONCURRENCY
+        value: 1

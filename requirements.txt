@@ -1,6 +1,7 @@
-flask
-Pillow
-ultralytics
-numpy
-opencv-python-headless
-gunicorn
+flask==2.3.3
+Pillow==10.0.0
+ultralytics==8.0.196
+numpy==1.25.2
+opencv-python-headless==4.8.0.76
+gunicorn==21.2.0
+Werkzeug==2.3.7
