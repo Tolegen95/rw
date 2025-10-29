@@ -6,6 +6,7 @@ from pathlib import Path
 import glob
 import json
 from datetime import datetime
+import torch
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key'  # Для работы с сессиями
@@ -98,32 +99,55 @@ def get_model(model_name):
             model_path = 'best.pt'
         else:
             model_path = f'{model_name}.pt'
-        models[model_name] = YOLO(model_path)
+        # Загружаем модель с оптимизированными настройками
+        model = YOLO(model_path)
+        model.fuse()  # Оптимизация модели
+        if torch.cuda.is_available():
+            model = model.half()  # Используем half precision для экономии памяти
+        models[model_name] = model
     return models[model_name]
+
+# Очистка моделей из памяти
+def clear_models():
+    global models
+    for model_name in models:
+        del models[model_name]
+    models = {}
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    import gc
+    gc.collect()
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def process_detection(model, image_path, conf_threshold=0.25, iou_threshold=0.45):
-    results = model(
-        image_path,
-        conf=conf_threshold,
-        iou=iou_threshold,
-        save=True,
-        save_txt=True
-    )
-    
-    # Собираем статистику детекции
-    detections = []
-    for r in results[0].boxes:
-        det = {
-            'class': results[0].names[int(r.cls)],
-            'confidence': float(r.conf),
-            'bbox': r.xyxy[0].tolist()
-        }
-        detections.append(det)
-    
-    return results, detections
+    try:
+        results = model(
+            image_path,
+            conf=conf_threshold,
+            iou=iou_threshold,
+            save=True,
+            save_txt=True
+        )
+        
+        # Собираем статистику детекции
+        detections = []
+        for r in results[0].boxes:
+            det = {
+                'class': results[0].names[int(r.cls)],
+                'confidence': float(r.conf),
+                'bbox': r.xyxy[0].tolist()
+            }
+            detections.append(det)
+        
+        return results, detections
+    finally:
+        # Очищаем память
+        if 'cuda' in str(model.device):
+            torch.cuda.empty_cache()
+        import gc
+        gc.collect()
 
 @app.route('/', methods=['GET'])
 def index():
@@ -190,6 +214,9 @@ def clear_results():
                 os.remove(f)
             except:
                 pass
+    
+    # Очищаем память
+    clear_models()
     return jsonify({'status': 'success'})
 
 if __name__ == '__main__':
