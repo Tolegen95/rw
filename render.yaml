@@ -2,12 +2,12 @@ services:
   - type: web
     name: flask-app
     env: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
     startCommand: gunicorn -w 1 -t 120 -b 0.0.0.0:$PORT app:app
     envVars:
       - key: PYTHON_VERSION
-        value: 3.9.0
+        value: 3.9.18
       - key: WEB_CONCURRENCY
         value: 1
-    plan: standard # Используем Standard plan вместо Free
-    instanceType: basic # Базовый тип инстанса с большим количеством памяти
+    plan: free # Используем бесплатный план
+    autoDeploy: true
