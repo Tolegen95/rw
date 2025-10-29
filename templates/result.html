@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Результат распознавания</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        .image-container {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+        }
+        .image-box {
+            margin: 10px;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            max-height: 600px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .back-btn {
+            background-color: #008CBA;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 20px;
+        }
+        .back-btn:hover {
+            background-color: #007399;
+        }
+    </style>
+</head>
+<body>
+    <h1>Результат распознавания</h1>
+    <div class="image-container">
+        <div class="image-box">
+            <h3>Исходное изображение</h3>
+            <img src="{{ input_image }}" alt="Исходное изображение">
+        </div>
+        <div class="image-box">
+            <h3>Результат распознавания</h3>
+            <img src="{{ result_image }}" alt="Результат распознавания">
+        </div>
+    </div>
+    <a href="/" class="back-btn">Загрузить другое изображение</a>
+</body>
+</html>

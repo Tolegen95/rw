@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ translations.title }}</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            margin: 20px 0;
+            background-color: #f8f9fa;
+        }
+        .upload-area.dragover {
+            background-color: #e9ecef;
+            border-color: #198754;
+        }
+        .preview-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .preview-item {
+            position: relative;
+            width: 200px;
+        }
+        .preview-item img {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 5px;
+        }
+        .preview-item .remove-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(255, 255, 255, 0.8);
+            border: none;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .settings-panel {
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        #results-container {
+            margin-top: 40px;
+        }
+        .result-card {
+            margin-bottom: 30px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .stats-table {
+            font-size: 14px;
+        }
+        .loading {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255,255,255,0.8);
+            z-index: 1000;
+        }
+        .loading-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container py-4">
+        <div class="text-end mb-3">
+            <div class="btn-group">
+                <a href="?lang=ru" class="btn btn-sm btn-outline-primary {% if current_lang == 'ru' %}active{% endif %}">RU</a>
+                <a href="?lang=kk" class="btn btn-sm btn-outline-primary {% if current_lang == 'kk' %}active{% endif %}">KK</a>
+                <a href="?lang=en" class="btn btn-sm btn-outline-primary {% if current_lang == 'en' %}active{% endif %}">EN</a>
+            </div>
+        </div>
+
+        <h1 class="text-center mb-4">{{ translations.title }}</h1>
+        
+        <div class="settings-panel">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="mb-3">
+                        <label class="form-label">{{ translations.model }}</label>
+                        <select class="form-select" id="model-select">
+                            {% for model_id, model_name in models.items() %}
+                            <option value="{{ model_id }}">{{ translations.model }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="mb-3">
+                        <label class="form-label">{{ translations.conf_threshold }}</label>
+                        <input type="number" class="form-control" id="conf-threshold" 
+                               value="0.25" min="0" max="1" step="0.05">
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="mb-3">
+                        <label class="form-label">{{ translations.iou_threshold }}</label>
+                        <input type="number" class="form-control" id="iou-threshold" 
+                               value="0.45" min="0" max="1" step="0.05">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="upload-area" id="drop-area">
+            <form class="upload-form">
+                <p class="mb-2">{{ translations.drop_files }}</p>
+                <input type="file" id="fileInput" multiple accept=".jpg,.jpeg,.png" style="display: none">
+                <button type="button" class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                    {{ translations.select_files }}
+                </button>
+            </form>
+        </div>
+
+        <div class="preview-container" id="preview"></div>
+
+        <div class="text-center mt-3" id="upload-btn-container" style="display: none;">
+            <button class="btn btn-success" onclick="processImages()">{{ translations.start_detection }}</button>
+            <button class="btn btn-danger ms-2" onclick="clearAll()">{{ translations.clear_all }}</button>
+        </div>
+
+        <div id="results-container"></div>
+    </div>
+
+    <div class="loading" id="loading">
+        <div class="loading-content">
+            <div class="spinner-border text-primary mb-3" role="status">
+                <span class="visually-hidden">Загрузка...</span>
+            </div>
+            <p>{{ translations.processing }}</p>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let files = [];
+        const dropArea = document.getElementById('drop-area');
+        const fileInput = document.getElementById('fileInput');
+        const preview = document.getElementById('preview');
+        const uploadBtnContainer = document.getElementById('upload-btn-container');
+        const loading = document.getElementById('loading');
+
+        // Drag and drop handlers
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) {
+            dropArea.classList.add('dragover');
+        }
+
+        function unhighlight(e) {
+            dropArea.classList.remove('dragover');
+        }
+
+        dropArea.addEventListener('drop', handleDrop, false);
+        fileInput.addEventListener('change', handleFiles, false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const newFiles = [...dt.files];
+            handleFiles({ target: { files: newFiles } });
+        }
+
+        function handleFiles(e) {
+            const newFiles = [...e.target.files];
+            files = files.concat(newFiles);
+            updatePreview();
+        }
+
+        function updatePreview() {
+            preview.innerHTML = '';
+            files.forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const div = document.createElement('div');
+                    div.className = 'preview-item';
+                    div.innerHTML = `
+                        <img src="${e.target.result}" alt="Preview">
+                        <button class="remove-btn" onclick="removeFile(${index})">×</button>
+                    `;
+                    preview.appendChild(div);
+                }
+                reader.readAsDataURL(file);
+            });
+            uploadBtnContainer.style.display = files.length > 0 ? 'block' : 'none';
+        }
+
+        function removeFile(index) {
+            files.splice(index, 1);
+            updatePreview();
+        }
+
+        function processImages() {
+            if (files.length === 0) return;
+
+            loading.style.display = 'block';
+            const formData = new FormData();
+            
+            files.forEach(file => {
+                formData.append('files[]', file);
+            });
+
+            formData.append('model', document.getElementById('model-select').value);
+            formData.append('conf', document.getElementById('conf-threshold').value);
+            formData.append('iou', document.getElementById('iou-threshold').value);
+
+            fetch('/detect', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(results => {
+                displayResults(results);
+                loading.style.display = 'none';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                loading.style.display = 'none';
+                alert('Произошла ошибка при обработке изображений');
+            });
+        }
+
+        function displayResults(results) {
+            const container = document.getElementById('results-container');
+            container.innerHTML = `<h2 class="text-center mb-4">{{ translations.results }}</h2>`;
+
+            results.forEach(result => {
+                const card = document.createElement('div');
+                card.className = 'card result-card';
+                
+                const detectionsList = result.detections.map(d => `
+                    <tr>
+                        <td>${d.class}</td>
+                        <td>${(d.confidence * 100).toFixed(2)}%</td>
+                        <td>${d.bbox.map(v => Math.round(v)).join(', ')}</td>
+                    </tr>
+                `).join('');
+
+                card.innerHTML = `
+                    <div class="card-body">
+                        <h5 class="card-title">${result.filename}</h5>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>{{ translations.original }}:</h6>
+                                <img src="${result.input_image}" class="img-fluid mb-3" alt="Input">
+                            </div>
+                            <div class="col-md-6">
+                                <h6>{{ translations.result }}:</h6>
+                                <img src="${result.result_image}" class="img-fluid mb-3" alt="Result">
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-sm stats-table">
+                                <thead>
+                                    <tr>
+                                        <th>{{ translations.class_col }}</th>
+                                        <th>{{ translations.confidence_col }}</th>
+                                        <th>{{ translations.coordinates_col }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${detectionsList}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="text-center mt-3">
+                            <a href="${result.result_image}" class="btn btn-primary btn-sm" 
+                               download="result_${result.filename}">{{ translations.download }}</a>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function clearAll() {
+            files = [];
+            updatePreview();
+            document.getElementById('results-container').innerHTML = '';
+            fetch('/clear', {
+                method: 'POST'
+            });
+        }
+    </script>
+</body>
+</html>
