@@ -3,7 +3,7 @@ services:
     name: flask-app
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python app.py
+    startCommand: gunicorn app:app --config gunicorn.conf.py
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0
